@@ -1,0 +1,62 @@
+pipeline {
+  agent {
+    kubernetes {
+      label 'maven'
+      yaml """\
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          app: maven-pod-template
+        spec:
+          containers:
+          - name: alpine
+            image: alpine:3.17
+            command:
+            - cat
+            tty: true
+          - name: maven
+            image: maven:3.9.0
+            command:
+            - cat
+            tty: true
+        """.stripIndent()
+    }
+  }
+    stages {
+        stage('git clone') {
+            steps {
+                container('alpine') {
+                    sh 'apk add git'
+                    git branch: 'main',
+                    url: 'https://github.com/KuberixEnterprise/edu-simple-java-maven.git'
+                }
+            }
+        }
+        stage('Build') {
+          steps {
+            container('maven') {
+              sh 'mvn -B -DskipTests clean package'
+            }
+          }
+        }
+        stage('Test') {
+          steps {
+            container('maven') {
+              sh 'mvn test'
+            }
+          }
+          post {
+            always {
+                junit 'target/surefire-reports/*.xml'
+            }
+          }
+        }
+        stage('Deliver') {
+          steps {
+            container('maven') {
+              sh './jenkins/scripts/deliver.sh'
+            }
+          }
+        }
+    }
+}
